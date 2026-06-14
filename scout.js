@@ -7,7 +7,7 @@
   "use strict";
 
   // ─── Constants ───────────────────────────────────────────────────────────────
-  const NIM_ENDPOINT   = "/api/nim";
+  const NIM_ENDPOINT   = "https://integrate.api.nvidia.com/v1/chat/completions";
   const RDAP_ENDPOINT  = "/api/rdap";
   const LS_KEY_APIKEY  = "microfinder_nim_key";
   const LS_KEY_RESULTS = "microfinder_scout_results";
@@ -657,9 +657,9 @@ Return [] if no strong opportunities found.`;
       }
 
       if (fallbackToDirect) {
-        if (attempt === 0) logProgress("📡 Local server API offline; trying direct query to NVIDIA NIM API...");
+        if (attempt === 0) logProgress("📡 Connecting to NVIDIA NIM API...");
         try {
-          response = await fetchWithCorsProxy("https://integrate.api.nvidia.com/v1/chat/completions", {
+          response = await fetchWithTimeout(NIM_ENDPOINT, {
             method: "POST",
             headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: bodyStr
@@ -667,7 +667,7 @@ Return [] if no strong opportunities found.`;
         } catch (directErr) {
           lastError = directErr;
           if (attempt < MAX_RETRIES) continue;
-          throw new Error(`Connection failed after ${MAX_RETRIES + 1} attempts: ${directErr.message}`);
+          throw new Error(`NVIDIA API connection failed: ${directErr.message}`);
         }
       }
 
