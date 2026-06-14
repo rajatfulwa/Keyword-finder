@@ -628,7 +628,7 @@ Return [] if no strong opportunities found.`;
     if (fallbackToDirect) {
       logProgress("📡 Local server API offline; trying direct query to NVIDIA NIM API...");
       try {
-        response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        response = await fetchWithCorsProxy("https://integrate.api.nvidia.com/v1/chat/completions", {
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -999,12 +999,12 @@ Return [] if no strong opportunities found.`;
   }
 
   // ─── CORS Proxy Fallback ──────────────────────────────────────────────────────
-  async function fetchWithCorsProxy(url) {
+  async function fetchWithCorsProxy(url, options = {}) {
     try {
-      const resp = await fetch(url, { headers: { "User-Agent": "MicroFinder/3.0" } });
+      const resp = await fetch(url, options);
       if (resp.ok || resp.status !== 0) return resp;
     } catch (_) {}
-    return fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+    return fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, options);
   }
 
   // ─── Utilities ────────────────────────────────────────────────────────────────
