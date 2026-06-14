@@ -606,6 +606,32 @@ Return [] if no strong opportunities found.`;
 
     const NIM_TIMEOUT = 90000; // 90s for LLM inference
     const MAX_RETRIES = 2;
+    const isDeepSeek = model.includes("deepseek");
+
+    // Build request payload — DeepSeek models get thinking mode
+    const payload = {
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user",   content: userPrompt }
+      ],
+      stream: false
+    };
+
+    if (isDeepSeek) {
+      // DeepSeek V4 recommended params from NVIDIA docs
+      payload.temperature = 1;
+      payload.top_p = 0.95;
+      payload.max_tokens = 4096;
+      payload.chat_template_kwargs = { thinking: true, reasoning_effort: "low" };
+      logProgress("🧠 DeepSeek thinking mode enabled (reasoning_effort: low)");
+    } else {
+      payload.temperature = scoutState.settings.temperature;
+      payload.top_p = 0.7;
+      payload.max_tokens = 1024;
+    }
+
+    const bodyStr = JSON.stringify(payload);
     let response;
     let lastError = null;
 
@@ -621,13 +647,7 @@ Return [] if no strong opportunities found.`;
         response = await fetchWithTimeout(NIM_ENDPOINT, {
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model, temperature: scoutState.settings.temperature, max_tokens: 1024, top_p: 0.7, stream: false,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user",   content: userPrompt }
-            ]
-          })
+          body: bodyStr
         }, NIM_TIMEOUT);
         if (!response.ok && response.status !== 401 && response.status !== 429) {
           fallbackToDirect = true;
@@ -642,17 +662,11 @@ Return [] if no strong opportunities found.`;
           response = await fetchWithCorsProxy("https://integrate.api.nvidia.com/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model, temperature: scoutState.settings.temperature, max_tokens: 1024, top_p: 0.7, stream: false,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user",   content: userPrompt }
-              ]
-            })
+            body: bodyStr
           }, NIM_TIMEOUT);
         } catch (directErr) {
           lastError = directErr;
-          if (attempt < MAX_RETRIES) continue; // retry
+          if (attempt < MAX_RETRIES) continue;
           throw new Error(`Connection failed after ${MAX_RETRIES + 1} attempts: ${directErr.message}`);
         }
       }
@@ -661,10 +675,9 @@ Return [] if no strong opportunities found.`;
       if (response && (response.status === 502 || response.status === 503 || response.status === 504)) {
         lastError = new Error(`Server returned ${response.status}`);
         logProgress(`⚠️ Server returned ${response.status} (gateway error)`);
-        if (attempt < MAX_RETRIES) continue; // retry
+        if (attempt < MAX_RETRIES) continue;
       }
 
-      // Got a definitive response (success or non-retryable error)
       break;
     }
 
@@ -676,7 +689,14 @@ Return [] if no strong opportunities found.`;
     }
 
     const data    = await response.json();
-    const content = data?.choices?.[0]?.message?.content || "[]";
+    const msg     = data?.choices?.[0]?.message;
+    const content = msg?.content || "[]";
+
+    // Log DeepSeek reasoning if available
+    const reasoning = msg?.reasoning_content || msg?.reasoning;
+    if (reasoning) {
+      logProgress(`🧠 DeepSeek reasoning: ${reasoning.substring(0, 120)}...`);
+    }
 
     let ideas = [];
     try {
