@@ -472,7 +472,7 @@
       logProgress(`📊 ${allPosts.length} posts → NVIDIA NIM AI...`);
       updateProgressLabel(`Analyzing with ${model.split("/")[1]}...`);
 
-      const batches = chunkArray(allPosts, 15);
+      const batches = chunkArray(allPosts, 8);
       for (let i = 0; i < batches.length; i++) {
         updateProgressLabel(`Analyzing batch ${i + 1} of ${batches.length}...`);
         logProgress(`⚡ Batch ${i + 1}/${batches.length} → NIM...`);
@@ -524,7 +524,7 @@
             posts.push({
               source: "reddit", subreddit: d.subreddit,
               title: d.title.substring(0, 200),
-              body:  (d.selftext || "").substring(0, 300),
+              body:  (d.selftext || "").substring(0, 150),
               score: d.score, comments: d.num_comments,
               url: `https://reddit.com${d.permalink}`
             });
@@ -555,7 +555,7 @@
       (data.hits || []).forEach(h => posts.push({
         source: "hackernews", subreddit: null,
         title: (h.title || "").substring(0, 200),
-        body:  (h.story_text || h.comment_text || "").substring(0, 300),
+        body:  (h.story_text || h.comment_text || "").substring(0, 150),
         score: h.points || 0, comments: h.num_comments || 0,
         url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`
       }));
@@ -604,31 +604,21 @@ competitionLevel: Low=few good free tools, Medium=some ok tools, High=saturated.
 monetizationPotential: High=pro users/high CPM, Medium=general users, Low=hobbyist.
 Return [] if no strong opportunities found.`;
 
+    const NIM_TIMEOUT = 90000; // 90s for LLM inference
+    const MAX_RETRIES = 2;
     let response;
-    let fallbackToDirect = false;
-    try {
-      response = await fetch(NIM_ENDPOINT, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model, temperature: scoutState.settings.temperature, max_tokens: 1024, top_p: 0.7, stream: false,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user",   content: userPrompt }
-          ]
-        })
-      });
-      if (!response.ok && response.status !== 401 && response.status !== 429) {
-        fallbackToDirect = true;
-      }
-    } catch (e) {
-      fallbackToDirect = true;
-    }
+    let lastError = null;
 
-    if (fallbackToDirect) {
-      logProgress("📡 Local server API offline; trying direct query to NVIDIA NIM API...");
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const delay = attempt * 3000;
+        logProgress(`⏳ Retry ${attempt}/${MAX_RETRIES} after ${delay / 1000}s...`);
+        await sleep(delay);
+      }
+
+      let fallbackToDirect = false;
       try {
-        response = await fetchWithCorsProxy("https://integrate.api.nvidia.com/v1/chat/completions", {
+        response = await fetchWithTimeout(NIM_ENDPOINT, {
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -638,10 +628,44 @@ Return [] if no strong opportunities found.`;
               { role: "user",   content: userPrompt }
             ]
           })
-        });
-      } catch (directErr) {
-        throw new Error(`Connection failed: both local proxy and direct NVIDIA NIM API are unreachable (${directErr.message})`);
+        }, NIM_TIMEOUT);
+        if (!response.ok && response.status !== 401 && response.status !== 429) {
+          fallbackToDirect = true;
+        }
+      } catch (e) {
+        fallbackToDirect = true;
       }
+
+      if (fallbackToDirect) {
+        if (attempt === 0) logProgress("📡 Local server API offline; trying direct query to NVIDIA NIM API...");
+        try {
+          response = await fetchWithCorsProxy("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model, temperature: scoutState.settings.temperature, max_tokens: 1024, top_p: 0.7, stream: false,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user",   content: userPrompt }
+              ]
+            })
+          }, NIM_TIMEOUT);
+        } catch (directErr) {
+          lastError = directErr;
+          if (attempt < MAX_RETRIES) continue; // retry
+          throw new Error(`Connection failed after ${MAX_RETRIES + 1} attempts: ${directErr.message}`);
+        }
+      }
+
+      // Check for retryable server errors
+      if (response && (response.status === 502 || response.status === 503 || response.status === 504)) {
+        lastError = new Error(`Server returned ${response.status}`);
+        logProgress(`⚠️ Server returned ${response.status} (gateway error)`);
+        if (attempt < MAX_RETRIES) continue; // retry
+      }
+
+      // Got a definitive response (success or non-retryable error)
+      break;
     }
 
     if (!response.ok) {
@@ -908,10 +932,18 @@ Return [] if no strong opportunities found.`;
   function showErrorCard(message) {
     const el = document.createElement("div");
     el.className = "scout-error-card";
+    const isTimeout = /timeout|504|502|503|timed out/i.test(message);
+    const isAuth = /401|invalid.*key|unauthorized/i.test(message);
+    let advice = "Check your API key or try a different model.";
+    if (isTimeout) {
+      advice = `<strong>Timeout Fix:</strong> Switch to a faster model (Llama 3.1 8B ⚡ or Mistral 7B ⚡) in the dropdown above. The 70B models are slower and often timeout through CORS proxies.`;
+    } else if (isAuth) {
+      advice = `Your NVIDIA NIM API key appears to be invalid. Get a free key from <a href="https://build.nvidia.com" target="_blank" rel="noopener">build.nvidia.com</a>.`;
+    }
     el.innerHTML = `
       <i data-lucide="alert-triangle"></i>
       <p><strong>Scan failed:</strong> ${escapeHtml(message)}<br>
-      <span style="margin-top:.25rem;display:block">Check your API key or try a different model.</span></p>
+      <span style="margin-top:.25rem;display:block">${advice}</span></p>
     `;
     resultsGrid.appendChild(el);
     lucide.createIcons();
@@ -998,13 +1030,49 @@ Return [] if no strong opportunities found.`;
     progressLog.scrollTop = progressLog.scrollHeight;
   }
 
-  // ─── CORS Proxy Fallback ──────────────────────────────────────────────────────
-  async function fetchWithCorsProxy(url, options = {}) {
+  // ─── CORS Proxy Fallback (Multi-proxy with timeout) ─────────────────────────
+  const CORS_PROXIES = [
+    (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+  ];
+
+  async function fetchWithTimeout(url, options = {}, timeoutMs = 60000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const resp = await fetch(url, options);
-      if (resp.ok || resp.status !== 0) return resp;
+      const resp = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timer);
+      return resp;
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+      }
+      throw err;
+    }
+  }
+
+  async function fetchWithCorsProxy(url, options = {}, timeoutMs = 60000) {
+    // 1. Try direct fetch first
+    try {
+      const resp = await fetchWithTimeout(url, options, timeoutMs);
+      if (resp.ok || (resp.status !== 0 && resp.status < 500)) return resp;
     } catch (_) {}
-    return fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, options);
+
+    // 2. Try each CORS proxy in order
+    for (let i = 0; i < CORS_PROXIES.length; i++) {
+      const proxyUrl = CORS_PROXIES[i](url);
+      try {
+        logProgress(`  ↳ Trying proxy ${i + 1}/${CORS_PROXIES.length}...`);
+        const resp = await fetchWithTimeout(proxyUrl, options, timeoutMs);
+        if (resp.ok || (resp.status !== 0 && resp.status < 500)) return resp;
+      } catch (e) {
+        console.warn(`[Scout] Proxy ${i + 1} failed:`, e.message);
+        if (i === CORS_PROXIES.length - 1) throw e; // last proxy, rethrow
+      }
+    }
+    throw new Error("All CORS proxies failed");
   }
 
   // ─── Utilities ────────────────────────────────────────────────────────────────
