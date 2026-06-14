@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Micro-Tool Keyword Finder & Validator</title>
+  <!-- Google Fonts: Outfit for body, Fira Code for code blocks -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- Lucide Icons (loaded via CDN) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="glow-container">
+    <div class="glow-circle glow-1"></div>
+    <div class="glow-circle glow-2"></div>
+  </div>
+
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <i data-lucide="key-round"></i>
+        </div>
+        <div class="brand-text">
+          <h1>MicroFinder</h1>
+          <span>Playbook Keyword Hub</span>
+        </div>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="nav-btn active" data-tab="browse">
+          <i data-lucide="search"></i>
+          <span>Browse Keywords</span>
+        </button>
+        <button class="nav-btn" data-tab="scout">
+          <i data-lucide="radar"></i>
+          <span>AI Scout</span>
+          <span class="nav-badge">NEW</span>
+        </button>
+        <button class="nav-btn" data-tab="validate">
+          <i data-lucide="sliders"></i>
+          <span>Lead Validator</span>
+        </button>
+        <button class="nav-btn" data-tab="checklist">
+          <i data-lucide="clipboard-check"></i>
+          <span>Build Checklist</span>
+        </button>
+      </nav>
+
+      <div class="header-footer">
+        <div class="theme-info">
+          <i data-lucide="moon" class="text-indigo"></i>
+          <span>Developer Theme</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- BROWSE TAB -->
+      <section id="tab-browse" class="tab-pane active">
+        <div class="content-header">
+          <div class="title-section">
+            <h2>Curated Opportunities</h2>
+            <p>Hand-picked keywords matching the playbook criteria: low difficulty, strong commercial intent, and clear competitor gaps.</p>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-label">Total Leads</span>
+              <span class="stat-value" id="stat-total">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Avg US Volume</span>
+              <span class="stat-value" id="stat-avg-vol">0</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Easy Diff (KD &lt; 20)</span>
+              <span class="stat-value text-emerald" id="stat-low-kd">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="filters-panel">
+          <div class="search-box">
+            <i data-lucide="search"></i>
+            <input type="text" id="search-input" placeholder="Search keywords, categories, or competitor gaps...">
+          </div>
+          <div class="filter-controls">
+            <div class="control-group">
+              <label for="filter-category">Category</label>
+              <select id="filter-category">
+                <option value="all">All Categories</option>
+                <option value="Developer">Developer</option>
+                <option value="Math">Math</option>
+                <option value="Utilities">Utilities</option>
+                <option value="Visual">Visual</option>
+                <option value="Text & SEO">Text & SEO</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="range-kd">Max KD: <span id="kd-val">50</span></label>
+              <input type="range" id="range-kd" min="0" max="50" value="50">
+            </div>
+            <div class="control-group">
+              <label for="range-vol">Min Vol: <span id="vol-val">10k</span></label>
+              <input type="range" id="range-vol" min="5000" max="150000" step="5000" value="5000">
+            </div>
+          </div>
+        </div>
+
+        <!-- Grid of Cards -->
+        <div class="keywords-grid" id="keywords-grid">
+          <!-- Populated dynamically via app.js -->
+        </div>
+      </section>
+
+      <!-- AI SCOUT TAB -->
+      <section id="tab-scout" class="tab-pane">
+        <div class="content-header">
+          <div class="title-section">
+            <h2>AI Scout</h2>
+            <p>Deep-scan Reddit &amp; Hacker News with NVIDIA NIM AI to surface micro-problems ready to be solved with a micro-SaaS.</p>
+          </div>
+        </div>
+
+        <!-- API Key Setup Banner -->
+        <div class="scout-api-panel" id="scout-api-panel">
+          <div class="api-panel-icon">
+            <i data-lucide="cpu"></i>
+          </div>
+          <div class="api-panel-body">
+            <h3>Connect NVIDIA NIM</h3>
+            <p>Enter your NIM API key to enable AI-powered problem extraction. Your key is stored locally only and never sent anywhere except NVIDIA's API.</p>
+            <div class="api-key-row">
+              <div class="api-input-wrap">
+                <i data-lucide="key"></i>
+                <input type="password" id="nim-api-key" placeholder="nvapi-xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+                <button class="btn-eye" id="btn-toggle-key" title="Show/hide key">
+                  <i data-lucide="eye" id="eye-icon"></i>
+                </button>
+              </div>
+              <button class="btn-save-key" id="btn-save-key">
+                <i data-lucide="check"></i>
+                <span>Save Key</span>
+              </button>
+            </div>
+            <p class="api-hint">Get a free key at <a href="https://build.nvidia.com" target="_blank" rel="noopener">build.nvidia.com</a> &rarr; Models &rarr; API Key</p>
+          </div>
+          <div class="api-status" id="api-status">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status-label">No key saved</span>
+          </div>
+        </div>
+
+        <!-- Scout Controls -->
+        <div class="scout-controls">
+          <div class="scout-sources">
+            <span class="sources-label">Data Sources</span>
+            <label class="source-toggle">
+              <input type="checkbox" id="src-reddit" checked>
+              <span class="toggle-pill"><i data-lucide="message-square"></i> Reddit</span>
+            </label>
+            <label class="source-toggle">
+              <input type="checkbox" id="src-hn" checked>
+              <span class="toggle-pill"><i data-lucide="terminal"></i> Hacker News</span>
+            </label>
+          </div>
+
+          <div class="scout-topic-row">
+            <div class="scout-search-wrap">
+              <i data-lucide="search"></i>
+              <input type="text" id="scout-topic" placeholder="Topic to scan (e.g. productivity, developer tools, finance...)" value="developer tools">
+            </div>
+            <div class="scout-model-select">
+              <select id="nim-model">
+                <option value="meta/llama-3.3-70b-instruct" selected>Llama 3.3 70B ⭐</option>
+                <option value="meta/llama-3.1-8b-instruct">Llama 3.1 8B (Faster)</option>
+                <option value="meta/llama-3.1-70b-instruct">Llama 3.1 70B</option>
+                <option value="mistralai/mistral-7b-instruct-v0.3">Mistral 7B</option>
+              </select>
+            </div>
+            <button class="btn-scan" id="btn-scan">
+              <i data-lucide="radar"></i>
+              <span>Start Scan</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Progress Stream -->
+        <div class="scout-progress hidden" id="scout-progress">
+          <div class="progress-header">
+            <div class="progress-spinner"></div>
+            <span id="progress-label">Initializing scan...</span>
+          </div>
+          <div class="progress-log" id="progress-log"></div>
+        </div>
+
+        <!-- Scout Stats + Toolbar -->
+        <div class="scout-toolbar hidden" id="scout-stats">
+          <div class="scout-toolbar-stats">
+            <div class="scout-stat-pill">
+              <i data-lucide="file-text"></i>
+              <span id="stat-posts-scanned">0</span> posts scanned
+            </div>
+            <div class="scout-stat-pill">
+              <i data-lucide="lightbulb"></i>
+              <span id="stat-ideas-found">0</span> ideas found
+            </div>
+            <div class="scout-stat-pill nim-pill">
+              <i data-lucide="zap"></i>
+              <span>NVIDIA NIM</span>
+            </div>
+          </div>
+          <div class="scout-toolbar-actions">
+            <div class="scout-sort-wrap">
+              <i data-lucide="arrow-up-down"></i>
+              <select id="scout-sort">
+                <option value="rank">Sort: Best Overall</option>
+                <option value="pain">Sort: Highest Pain</option>
+                <option value="devtime">Sort: Fastest to Build</option>
+                <option value="competition">Sort: Least Competition</option>
+              </select>
+            </div>
+            <button class="btn-toolbar" id="btn-export-csv">
+              <i data-lucide="download"></i>
+              Export CSV
+            </button>
+            <button class="btn-toolbar btn-toolbar-danger" id="btn-clear-saved">
+              <i data-lucide="trash-2"></i>
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- Rank Legend -->
+        <div class="rank-legend hidden" id="rank-legend">
+          <div class="rank-legend-item high">
+            <span class="rank-dot"></span> Score ≥ 70 — Strong opportunity
+          </div>
+          <div class="rank-legend-item medium">
+            <span class="rank-dot"></span> Score 45–69 — Moderate opportunity
+          </div>
+          <div class="rank-legend-item low">
+            <span class="rank-dot"></span> Score &lt; 45 — Weak signal
+          </div>
+          <div class="rank-formula">
+            <i data-lucide="info"></i>
+            Score = Pain×35% + Dev Speed×30% + Competition×25% + Monetization×10%
+          </div>
+        </div>
+
+        <!-- Results Grid -->
+        <div class="scout-results-grid" id="scout-results-grid"></div>
+
+        <!-- Empty State -->
+        <div class="scout-empty" id="scout-empty">
+          <div class="scout-empty-icon">
+            <i data-lucide="radar"></i>
+          </div>
+          <h3>Ready to Scout</h3>
+          <p>Save your NVIDIA NIM API key above, choose your sources and topic, then hit <strong>Start Scan</strong>. The AI will extract real micro-problems from community posts.</p>
+        </div>
+      </section>
+
+
+      <!-- VALIDATE TAB -->
+      <section id="tab-validate" class="tab-pane">
+        <div class="content-header">
+          <div class="title-section">
+            <h2>Custom Lead Validator</h2>
+            <p>Score your keyword leads using the exact Go/No-Go rules defined in the playbook. Check viability before buying a domain.</p>
+          </div>
+        </div>
+
+        <div class="validator-layout">
+          <!-- Validator Form -->
+          <form class="validator-form" id="validator-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="val-keyword">Target Keyword</label>
+                <input type="text" id="val-keyword" required placeholder="e.g., pdf compressor 200kb">
+              </div>
+              <div class="form-group">
+                <label for="val-category">Category</label>
+                <select id="val-category">
+                  <option value="Developer">Developer</option>
+                  <option value="Math">Math</option>
+                  <option value="Utilities">Utilities</option>
+                  <option value="Visual">Visual</option>
+                  <option value="Text & SEO">Text & SEO</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="val-volume">US Search Volume (Monthly)</label>
+                <input type="number" id="val-volume" required min="1" placeholder="e.g., 12000">
+              </div>
+              <div class="form-group">
+                <label for="val-kd">Keyword Difficulty (KD)</label>
+                <input type="number" id="val-kd" required min="0" max="100" placeholder="e.g., 18">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Competitor Gaps (At least 2 required for high score)</label>
+              <div class="gap-input-container">
+                <input type="text" class="val-gap" placeholder="Gap 1: e.g., Competitors have intrusive popups that block the workspace.">
+                <input type="text" class="val-gap" placeholder="Gap 2: e.g., Mobile view has broken layout / calibration doesn't work.">
+                <input type="text" class="val-gap" placeholder="Gap 3: e.g., Missing bulk export / local history cache.">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-submit">
+              <i data-lucide="check-circle2"></i>
+              <span>Validate & Score Lead</span>
+            </button>
+          </form>
+
+          <!-- Scoring Dashboard -->
+          <div class="scoring-dashboard" id="scoring-dashboard">
+            <div class="score-card">
+              <div class="score-radial">
+                <svg viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="45" class="bg"></circle>
+                  <circle cx="50" cy="50" r="45" class="val" id="score-circle" stroke-dasharray="283" stroke-dashoffset="283"></circle>
+                </svg>
+                <div class="score-text">
+                  <span class="score-number" id="score-num">0</span>
+                  <span class="score-max">/100</span>
+                </div>
+              </div>
+              <div class="verdict-container">
+                <span class="verdict-badge" id="verdict-badge">PENDING</span>
+                <p class="verdict-summary" id="verdict-summary">Enter keyword details to run feasibility analysis.</p>
+              </div>
+            </div>
+
+            <div class="checklist-card">
+              <h3>Score Breakdown</h3>
+              <ul class="score-checklist" id="score-checklist">
+                <li><i data-lucide="minus"></i> <span>Keyword Volume check (> 10,000)</span></li>
+                <li><i data-lucide="minus"></i> <span>Keyword Difficulty check (< 30 is ideal)</span></li>
+                <li><i data-lucide="minus"></i> <span>Competitor gaps listed (2+ gaps)</span></li>
+                <li><i data-lucide="minus"></i> <span>Search intent check (Single purpose tool viability)</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resulting Prompt Section -->
+        <div id="validator-result-section" class="prompt-section hidden">
+          <div class="prompt-header">
+            <h3>Generated Build Brief</h3>
+            <button class="btn-copy" id="btn-copy-val-prompt">
+              <i data-lucide="copy"></i>
+              <span>Copy Build Prompt</span>
+            </button>
+          </div>
+          <pre><code id="val-prompt-code">...</code></pre>
+        </div>
+      </section>
+
+      <!-- CHECKLIST TAB -->
+      <section id="tab-checklist" class="tab-pane">
+        <div class="content-header">
+          <div class="title-section">
+            <h2>Micro-Tool Launch Tracker</h2>
+            <p>Track your active project's progress against the playbook. Your checkboxes persist locally in your browser.</p>
+          </div>
+          <button class="btn-reset" id="btn-reset-checklist">
+            <i data-lucide="rotate-ccw"></i>
+            <span>Reset Checklist</span>
+          </button>
+        </div>
+
+        <div class="checklist-layout">
+          <div class="checklist-column">
+            <div class="checklist-group-card">
+              <h3><i data-lucide="search" class="text-indigo"></i> Phase 1: Planning & Setup</h3>
+              <ul class="tracker-list">
+                <li>
+                  <input type="checkbox" id="chk-lead-validated">
+                  <label for="chk-lead-validated">Lead validated in Ahrefs/GSC (US volume > 10k confirmed)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-gaps-doc">
+                  <label for="chk-gaps-doc">Competitor gaps documented</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-domain-buy">
+                  <label for="chk-domain-buy">Domain purchased (exact-match keyword .com if possible)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-scaffold">
+                  <label for="chk-scaffold">Astro + Tailwind project scaffolded</label>
+                </li>
+              </ul>
+            </div>
+
+            <div class="checklist-group-card">
+              <h3><i data-lucide="code" class="text-emerald"></i> Phase 2: Build Cycles</h3>
+              <ul class="tracker-list">
+                <li>
+                  <input type="checkbox" id="chk-pass1">
+                  <label for="chk-pass1">Core tool functionality built (Pass 1)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-pass2">
+                  <label for="chk-pass2">Calibration / accuracy features (Pass 2, if applicable)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-pass3">
+                  <label for="chk-pass3">Design pass against design guidelines (Pass 3)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-pass4">
+                  <label for="chk-pass4">Dark mode support (Pass 4)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-pass5">
+                  <label for="chk-pass5">Mobile responsiveness (Pass 5)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-pass6">
+                  <label for="chk-pass6">Competitor-gap pass (Pass 6)</label>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="checklist-column">
+            <div class="checklist-group-card">
+              <h3><i data-lucide="globe" class="text-violet"></i> Phase 3: Launch Checklist</h3>
+              <ul class="tracker-list">
+                <li>
+                  <input type="checkbox" id="chk-seo-tags">
+                  <label for="chk-seo-tags">On-page SEO: title, meta, H1, keywords optimized</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-faq-schema">
+                  <label for="chk-faq-schema">FAQ section + FAQPage schema built (from PAA questions)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-privacy">
+                  <label for="chk-privacy">Privacy Policy page built & linked</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-terms">
+                  <label for="chk-terms">Terms & Conditions page built & linked</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-about">
+                  <label for="chk-about">About Us page built & linked</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-contact">
+                  <label for="chk-contact">Contact page/link set up</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-404">
+                  <label for="chk-404">Custom 404 page created</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-sitemap">
+                  <label for="chk-sitemap">sitemap.xml and robots.txt ready</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-favicon">
+                  <label for="chk-favicon">Custom designed favicon installed</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-analytics">
+                  <label for="chk-analytics">Google Analytics installed</label>
+                </li>
+              </ul>
+            </div>
+
+            <div class="checklist-group-card">
+              <h3><i data-lucide="dollar-sign" class="text-rose"></i> Phase 4: Deploy & Monetize</h3>
+              <ul class="tracker-list">
+                <li>
+                  <input type="checkbox" id="chk-cloudflare">
+                  <label for="chk-cloudflare">Deployed to Cloudflare Pages & Custom Domain connected</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-headers">
+                  <label for="chk-headers">_headers file blocks default pages.dev from indexing</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-gsc">
+                  <label for="chk-gsc">Submitted to Google Search Console & Bing Webmaster Tools</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-traffic">
+                  <label for="chk-traffic">Waited for ~10 daily users (sustained, checked via Analytics)</label>
+                </li>
+                <li>
+                  <input type="checkbox" id="chk-adsense">
+                  <label for="chk-adsense">Applied for AdSense after traffic validation</label>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Slide-Out Details Sidebar (Dynamic) -->
+    <aside class="details-sidebar" id="details-sidebar">
+      <button class="btn-close-sidebar" id="btn-close-sidebar">
+        <i data-lucide="x"></i>
+      </button>
+      <div class="sidebar-content" id="sidebar-content">
+        <!-- Injected via app.js -->
+      </div>
+    </aside>
+  </div>
+
+  <!-- Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script src="scout.js"></script>
+</body>
+</html>
