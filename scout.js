@@ -7,7 +7,7 @@
   "use strict";
 
   // ─── Constants ───────────────────────────────────────────────────────────────
-  const NIM_ENDPOINT   = "https://integrate.api.nvidia.com/v1/chat/completions";
+  const NIM_ENDPOINT   = "/api/nim";
   const RDAP_ENDPOINT  = "/api/rdap";
   const LS_KEY_APIKEY  = "microfinder_nim_key";
   const LS_KEY_RESULTS = "microfinder_scout_results";
@@ -642,33 +642,17 @@ Return [] if no strong opportunities found.`;
         await sleep(delay);
       }
 
-      let fallbackToDirect = false;
       try {
         response = await fetchWithTimeout(NIM_ENDPOINT, {
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: bodyStr
         }, NIM_TIMEOUT);
-        if (!response.ok && response.status !== 401 && response.status !== 429) {
-          fallbackToDirect = true;
-        }
-      } catch (e) {
-        fallbackToDirect = true;
-      }
-
-      if (fallbackToDirect) {
-        if (attempt === 0) logProgress("📡 Connecting to NVIDIA NIM API...");
-        try {
-          response = await fetchWithTimeout(NIM_ENDPOINT, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: bodyStr
-          }, NIM_TIMEOUT);
-        } catch (directErr) {
-          lastError = directErr;
-          if (attempt < MAX_RETRIES) continue;
-          throw new Error(`NVIDIA API connection failed: ${directErr.message}`);
-        }
+      } catch (err) {
+        lastError = err;
+        logProgress(`⚠️ Request failed: ${err.message}`);
+        if (attempt < MAX_RETRIES) continue;
+        throw new Error(`NVIDIA API connection failed: ${err.message}`);
       }
 
       // Check for retryable server errors
