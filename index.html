@@ -50,6 +50,10 @@
           <i data-lucide="clipboard-check"></i>
           <span>Build Checklist</span>
         </button>
+        <button class="nav-btn" data-tab="portfolio">
+          <i data-lucide="briefcase"></i>
+          <span>My Portfolio</span>
+        </button>
       </nav>
 
       <div class="header-footer">
@@ -185,10 +189,38 @@
                 <option value="mistralai/mistral-7b-instruct-v0.3">Mistral 7B</option>
               </select>
             </div>
+            <button class="btn-toolbar" id="btn-toggle-scout-settings" style="height: 42px; width: 42px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; padding: 0; background: var(--bg-card); border-color: var(--border-color); cursor: pointer;" title="Scout Settings">
+              <i data-lucide="settings"></i>
+            </button>
             <button class="btn-scan" id="btn-scan">
               <i data-lucide="radar"></i>
               <span>Start Scan</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Scout Advanced Settings Panel (Collapsible) -->
+        <div class="scout-settings-panel hidden" id="scout-settings-panel" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.25rem; margin-top: -1rem; margin-bottom: 2rem; display: flex; flex-direction: column; gap: 1rem;">
+          <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+            <i data-lucide="sliders" class="text-indigo"></i> Advanced AI Scout Settings
+          </h4>
+          <div class="form-row" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+              <label for="scout-temp">AI Model Temperature: <span id="scout-temp-val">0.2</span></label>
+              <input type="range" id="scout-temp" min="0.0" max="1.0" step="0.1" value="0.2" style="width: 100%;">
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+              <label for="scout-reddit-limit">Max Reddit Posts to Scan (per sub)</label>
+              <input type="number" id="scout-reddit-limit" min="5" max="50" value="15" style="width: 100%;">
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+              <label for="scout-hn-points">Min Hacker News Points</label>
+              <input type="number" id="scout-hn-points" min="5" max="200" value="10" style="width: 100%;">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top: 0.5rem;">
+            <label for="scout-custom-prompt">Custom Analysis Instructions (Optional)</label>
+            <textarea id="scout-custom-prompt" placeholder="e.g. Focus specifically on tools for developers, and prioritize open-source alternative ideas." rows="2" style="width: 100%; background: var(--bg-body); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; border-radius: var(--radius-md); font-family: inherit; font-size: 0.85rem; resize: vertical;"></textarea>
           </div>
         </div>
 
@@ -359,10 +391,20 @@
         <div id="validator-result-section" class="prompt-section hidden">
           <div class="prompt-header">
             <h3>Generated Build Brief</h3>
-            <button class="btn-copy" id="btn-copy-val-prompt">
-              <i data-lucide="copy"></i>
-              <span>Copy Build Prompt</span>
-            </button>
+            <div class="brief-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn-copy" id="btn-save-lead" style="background: rgba(99,102,241,0.1); border-color: var(--color-indigo);">
+                <i data-lucide="save"></i>
+                <span>Save to Leads</span>
+              </button>
+              <button class="btn-copy" id="btn-download-brief">
+                <i data-lucide="download"></i>
+                <span>Download .md</span>
+              </button>
+              <button class="btn-copy" id="btn-copy-val-prompt">
+                <i data-lucide="copy"></i>
+                <span>Copy Build Prompt</span>
+              </button>
+            </div>
           </div>
           <pre><code id="val-prompt-code">...</code></pre>
         </div>
@@ -507,6 +549,124 @@
                   <label for="chk-adsense">Applied for AdSense after traffic validation</label>
                 </li>
               </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- PORTFOLIO TAB -->
+      <section id="tab-portfolio" class="tab-pane">
+        <div class="content-header">
+          <div class="title-section">
+            <h2>My Micro-Tool Portfolio</h2>
+            <p>Track your launched micro-tools, monitor traffic, monthly earnings, and calculate your total portfolio valuation.</p>
+          </div>
+        </div>
+
+        <!-- Portfolio Stats Grid -->
+        <div class="stats-grid" style="margin-bottom: 2rem;">
+          <div class="stat-card">
+            <span class="stat-label">Total Projects</span>
+            <span class="stat-value" id="port-stat-count">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Monthly Traffic</span>
+            <span class="stat-value" id="port-stat-traffic">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Monthly Earnings</span>
+            <span class="stat-value text-emerald" id="port-stat-revenue">$0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Est. Valuation (30x)</span>
+            <span class="stat-value text-indigo" id="port-stat-valuation">$0</span>
+          </div>
+        </div>
+
+        <div class="validator-layout">
+          <!-- Add/Edit Project Form -->
+          <div class="validator-form">
+            <h3 style="margin-top: 0; margin-bottom: 1.5rem;" id="port-form-title"><i data-lucide="plus-circle" class="text-indigo" style="vertical-align: middle; margin-right: 0.5rem;"></i>Add Project</h3>
+            <form id="portfolio-form">
+              <input type="hidden" id="port-project-id" value="">
+              
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="port-domain">Domain Name</label>
+                  <input type="text" id="port-domain" required placeholder="e.g., onlineruler.com">
+                </div>
+                <div class="form-group">
+                  <label for="port-keyword">Target Keyword</label>
+                  <input type="text" id="port-keyword" required placeholder="e.g., online ruler">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="port-date">Launch Date</label>
+                  <input type="date" id="port-date" required>
+                </div>
+                <div class="form-group">
+                  <label for="port-status">Status</label>
+                  <select id="port-status">
+                    <option value="Planning">Planning</option>
+                    <option value="In Development">In Development</option>
+                    <option value="Live (Sandbox)">Live (Sandbox)</option>
+                    <option value="Monetized">Monetized</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="port-traffic">Monthly Traffic (Sessions)</label>
+                  <input type="number" id="port-traffic" value="0" min="0" placeholder="e.g., 5000">
+                </div>
+                <div class="form-group">
+                  <label for="port-revenue">Monthly Revenue ($)</label>
+                  <input type="number" id="port-revenue" value="0" min="0" placeholder="e.g., 120">
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                <button type="submit" class="btn-submit" style="flex: 1;">
+                  <i data-lucide="check-circle2"></i>
+                  <span id="port-submit-btn-text">Add Project</span>
+                </button>
+                <button type="button" class="btn-reset hidden" id="btn-cancel-port-edit" style="padding: 0 1.25rem;">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Project List -->
+          <div class="scoring-dashboard" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+              <span>Portfolio Projects</span>
+              <span class="nav-badge" style="background: var(--border-color); color: var(--text-secondary);" id="port-count-badge">0</span>
+            </h3>
+            
+            <div style="overflow-x: auto; width: 100%;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;" id="portfolio-table">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-weight: 500;">
+                    <th style="padding: 0.75rem 0.5rem;">Domain / Keyword</th>
+                    <th style="padding: 0.75rem 0.5rem;">Traffic</th>
+                    <th style="padding: 0.75rem 0.5rem;">Earnings</th>
+                    <th style="padding: 0.75rem 0.5rem;">Status</th>
+                    <th style="padding: 0.75rem 0.5rem; text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="portfolio-tbody">
+                  <!-- Injected dynamically via app.js -->
+                </tbody>
+              </table>
+              
+              <div id="portfolio-empty-state" style="text-align: center; padding: 2rem 0; color: var(--text-muted);">
+                <i data-lucide="briefcase" style="width: 36px; height: 36px; stroke-width: 1.5; margin-bottom: 0.5rem;"></i>
+                <p style="margin: 0; font-size: 0.85rem;">No projects added yet. Use the form to catalog your micro-tools.</p>
+              </div>
             </div>
           </div>
         </div>

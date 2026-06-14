@@ -49,12 +49,31 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  // --- Custom Keywords Sync ---
+  let customKeywords = [];
+  function loadCustomKeywords() {
+    try {
+      const saved = localStorage.getItem("microfinder_custom_keywords");
+      if (saved) {
+        customKeywords = JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Error loading custom keywords", e);
+    }
+  }
+
+  function getActiveDatabase() {
+    return [...KEYWORDS_DATABASE, ...customKeywords];
+  }
+
   // --- Initializer functions ---
   function init() {
+    loadCustomKeywords();
     setupTabSwitching();
     setupFilters();
     setupDetailsSidebar();
     setupValidator();
+    setupPortfolioTracker();
     setupChecklistTracker();
     renderKeywords();
     
@@ -151,11 +170,37 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- Render Keyword Cards ---
+  function showToast(message, type = "info") {
+    document.getElementById("app-toast")?.remove();
+    const toast = document.createElement("div");
+    toast.id = "app-toast";
+    const bg = type === "error" ? "rgba(244,63,94,0.92)" : type === "success" ? "rgba(16,185,129,0.92)" : "rgba(99,102,241,0.92)";
+    toast.style.cssText = `position:fixed;bottom:2rem;right:2rem;z-index:9999;background:${bg};
+      backdrop-filter:blur(12px);color:#fff;padding:.875rem 1.5rem;border-radius:12px;
+      font-family:'Outfit',sans-serif;font-size:.9rem;font-weight:600;
+      box-shadow:0 8px 30px rgba(0,0,0,.4);`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.transition = "all 0.3s ease-in";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(10px)";
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  }
+
+  function deleteCustomLead(keyword) {
+    customKeywords = customKeywords.filter(k => k.keyword !== keyword);
+    localStorage.setItem("microfinder_custom_keywords", JSON.stringify(customKeywords));
+    renderKeywords();
+    showToast(`Deleted custom lead: "${keyword}"`, "success");
+  }
+
   function renderKeywords() {
     // Clear grid
     keywordsGrid.innerHTML = "";
 
-    const filtered = KEYWORDS_DATABASE.filter(item => {
+    const filtered = getActiveDatabase().filter(item => {
       const matchSearch = item.keyword.toLowerCase().includes(appState.filters.search) ||
                           item.category.toLowerCase().includes(appState.filters.search) ||
                           item.description.toLowerCase().includes(appState.filters.search);
@@ -185,12 +230,25 @@ document.addEventListener("DOMContentLoaded", () => {
       const score = calculateFeasibility(item);
       const scoreCat = getScoreCategory(score);
       
+      const customTagHtml = item.isCustom ? `<span class="category-tag custom-lead-tag" style="background: rgba(16,185,129,0.1); color: var(--color-emerald); border-color: var(--color-emerald); margin-left: 0.25rem;">Custom</span>` : '';
+      const deleteBtnHtml = item.isCustom ? `
+        <button class="btn-delete-lead" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:2px; display:inline-flex; align-items:center; justify-content:center;" title="Delete custom lead">
+          <i data-lucide="trash-2" style="width: 14px; height: 14px; color: var(--color-rose);"></i>
+        </button>
+      ` : '';
+
       const card = document.createElement("div");
       card.className = "keyword-card";
       card.innerHTML = `
-        <div class="card-header-row">
-          <span class="category-tag">${item.category}</span>
-          <span class="score-badge ${scoreCat}">${score} Score</span>
+        <div class="card-header-row" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div style="display:flex; align-items:center;">
+            <span class="category-tag">${item.category}</span>
+            ${customTagHtml}
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <span class="score-badge ${scoreCat}">${score} Score</span>
+            ${deleteBtnHtml}
+          </div>
         </div>
         <h3>${item.keyword}</h3>
         <p class="card-desc">${item.description}</p>
@@ -207,6 +265,15 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
 
       card.addEventListener("click", () => openSidebar(item));
+
+      if (item.isCustom) {
+        const delBtn = card.querySelector(".btn-delete-lead");
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteCustomLead(item.keyword);
+        });
+      }
+
       keywordsGrid.appendChild(card);
     });
 
@@ -322,6 +389,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- Lead Validator Handlers ---
   function setupValidator() {
+    let lastValidatedData = null;
+
     validatorForm.addEventListener("submit", (e) => {
       e.preventDefault();
 
@@ -334,7 +403,20 @@ document.addEventListener("DOMContentLoaded", () => {
       const gaps = Array.from(gapInputs).map(input => input.value.trim()).filter(val => val !== "");
 
       // Run Feasibility score
-      const keywordData = { keyword, category, volume, kd, gaps };
+      const keywordData = { keyword, category, volume, kd, gaps, isCustom: true };
+      lastValidatedData = keywordData;
+
+      // Reset Save button UI state
+      const saveBtn = document.getElementById("btn-save-lead");
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.querySelector("span").textContent = "Save to Leads";
+        saveBtn.querySelector("i").setAttribute("data-lucide", "save");
+        saveBtn.style.background = "rgba(99,102,241,0.1)";
+        saveBtn.style.borderColor = "var(--color-indigo)";
+        lucide.createIcons();
+      }
+
       const score = calculateFeasibility(keywordData);
 
       // Render Score Animation
@@ -348,6 +430,63 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Scroll down slightly to show results
       scoringDashboard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+
+    const saveLeadBtn = document.getElementById("btn-save-lead");
+    const downloadBriefBtn = document.getElementById("btn-download-brief");
+
+    saveLeadBtn.addEventListener("click", () => {
+      if (!lastValidatedData) return;
+      
+      // Check if keyword already exists in active leads
+      const exists = getActiveDatabase().some(k => k.keyword.toLowerCase() === lastValidatedData.keyword.toLowerCase());
+      if (exists) {
+        showToast(`Lead "${lastValidatedData.keyword}" already exists!`, "error");
+        return;
+      }
+
+      // Add to custom keywords
+      customKeywords.push({
+        ...lastValidatedData,
+        description: lastValidatedData.description || `Custom validated single-purpose web tool for "${lastValidatedData.keyword}".`,
+        competitors: lastValidatedData.competitors || [],
+        paa: lastValidatedData.paa || []
+      });
+
+      localStorage.setItem("microfinder_custom_keywords", JSON.stringify(customKeywords));
+      
+      // Render
+      renderKeywords();
+
+      // Feedback microinteraction
+      saveLeadBtn.disabled = true;
+      saveLeadBtn.querySelector("span").textContent = "Saved!";
+      saveLeadBtn.querySelector("i").setAttribute("data-lucide", "check");
+      saveLeadBtn.style.background = "var(--color-emerald-glow)";
+      saveLeadBtn.style.borderColor = "var(--color-emerald)";
+      lucide.createIcons();
+
+      showToast(`Saved "${lastValidatedData.keyword}" to your Leads list!`, "success");
+    });
+
+    downloadBriefBtn.addEventListener("click", () => {
+      if (!lastValidatedData) return;
+
+      const promptText = valPromptCode.textContent;
+      const blob = new Blob([promptText], { type: "text/markdown;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      
+      const filename = lastValidatedData.keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-brief.md";
+      
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Downloaded brief: ${filename}`, "success");
     });
 
     copyValPromptBtn.addEventListener("click", () => {
@@ -471,6 +610,178 @@ no unnecessary client-side JS beyond what the tool itself needs.`;
 
     valPromptCode.textContent = prompt;
     valResultSection.classList.remove("hidden");
+  }
+
+  // --- Portfolio Tracker Handlers ---
+  let portfolioProjects = [];
+  function loadPortfolioProjects() {
+    try {
+      const saved = localStorage.getItem("microfinder_portfolio_projects");
+      if (saved) {
+        portfolioProjects = JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Error loading portfolio projects", e);
+    }
+  }
+
+  function renderPortfolio() {
+    const tbody = document.getElementById("portfolio-tbody");
+    const emptyState = document.getElementById("portfolio-empty-state");
+    const table = document.getElementById("portfolio-table");
+    
+    if (!tbody || !emptyState || !table) return;
+
+    tbody.innerHTML = "";
+
+    let totalTraffic = 0;
+    let totalRevenue = 0;
+
+    portfolioProjects.forEach(proj => {
+      totalTraffic += Number(proj.traffic || 0);
+      totalRevenue += Number(proj.revenue || 0);
+
+      const tr = document.createElement("tr");
+      tr.style.borderBottom = "1px solid var(--border-color)";
+      
+      let statusClass = "verdict-badge";
+      if (proj.status === "Monetized") statusClass += " go";
+      else if (proj.status === "Live (Sandbox)") statusClass += " warning";
+      else statusClass += " nogo"; // Planning or In Development
+
+      tr.innerHTML = `
+        <td style="padding: 0.75rem 0.5rem;">
+          <div style="font-weight: 600; color: var(--text-primary);">${proj.domain}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">${proj.keyword}</div>
+        </td>
+        <td style="padding: 0.75rem 0.5rem; color: var(--text-secondary);">${formatNumber(proj.traffic)}/mo</td>
+        <td style="padding: 0.75rem 0.5rem; color: var(--color-emerald); font-weight: 600;">$${proj.revenue}/mo</td>
+        <td style="padding: 0.75rem 0.5rem;">
+          <span class="${statusClass}" style="font-size: 0.7rem; padding: 2px 6px;">${proj.status}</span>
+        </td>
+        <td style="padding: 0.75rem 0.5rem; text-align: right; white-space: nowrap;">
+          <button class="btn-edit-proj btn-copy" style="padding: 4px 8px; font-size: 0.75rem; margin-right: 0.25rem;" data-id="${proj.id}">
+            <i data-lucide="edit-3" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button class="btn-delete-proj btn-copy" style="padding: 4px 8px; font-size: 0.75rem; border-color: var(--color-rose); color: var(--color-rose);" data-id="${proj.id}">
+            <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+          </button>
+        </td>
+      `;
+
+      tbody.appendChild(tr);
+    });
+
+    // Update Stats
+    document.getElementById("port-stat-count").textContent = portfolioProjects.length;
+    document.getElementById("port-count-badge").textContent = portfolioProjects.length;
+    document.getElementById("port-stat-traffic").textContent = formatNumber(totalTraffic);
+    document.getElementById("port-stat-revenue").textContent = `$${totalRevenue}`;
+    document.getElementById("port-stat-valuation").textContent = `$${totalRevenue * 30}`;
+
+    // Toggle Empty State
+    if (portfolioProjects.length === 0) {
+      emptyState.style.display = "block";
+      table.style.display = "none";
+    } else {
+      emptyState.style.display = "none";
+      table.style.display = "table";
+    }
+
+    // Bind Edit/Delete buttons
+    tbody.querySelectorAll(".btn-edit-proj").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        const proj = portfolioProjects.find(p => p.id === id);
+        if (proj) {
+          startEditProject(proj);
+        }
+      });
+    });
+
+    tbody.querySelectorAll(".btn-delete-proj").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-id");
+        const proj = portfolioProjects.find(p => p.id === id);
+        if (proj && confirm(`Delete project "${proj.domain}"?`)) {
+          portfolioProjects = portfolioProjects.filter(p => p.id !== id);
+          localStorage.setItem("microfinder_portfolio_projects", JSON.stringify(portfolioProjects));
+          renderPortfolio();
+          showToast(`Deleted "${proj.domain}" from portfolio.`, "success");
+        }
+      });
+    });
+
+    lucide.createIcons();
+  }
+
+  function startEditProject(proj) {
+    document.getElementById("port-project-id").value = proj.id;
+    document.getElementById("port-domain").value = proj.domain;
+    document.getElementById("port-keyword").value = proj.keyword;
+    document.getElementById("port-date").value = proj.date;
+    document.getElementById("port-status").value = proj.status;
+    document.getElementById("port-traffic").value = proj.traffic;
+    document.getElementById("port-revenue").value = proj.revenue;
+
+    document.getElementById("port-form-title").innerHTML = `<i data-lucide="edit-3" class="text-indigo" style="vertical-align: middle; margin-right: 0.5rem;"></i>Edit Project`;
+    document.getElementById("port-submit-btn-text").textContent = "Update Project";
+    document.getElementById("btn-cancel-port-edit").classList.remove("hidden");
+    lucide.createIcons();
+  }
+
+  function cancelProjectEdit() {
+    document.getElementById("port-project-id").value = "";
+    document.getElementById("portfolio-form").reset();
+    document.getElementById("port-form-title").innerHTML = `<i data-lucide="plus-circle" class="text-indigo" style="vertical-align: middle; margin-right: 0.5rem;"></i>Add Project`;
+    document.getElementById("port-submit-btn-text").textContent = "Add Project";
+    document.getElementById("btn-cancel-port-edit").classList.add("hidden");
+    lucide.createIcons();
+  }
+
+  function setupPortfolioTracker() {
+    loadPortfolioProjects();
+    renderPortfolio();
+
+    const form = document.getElementById("portfolio-form");
+    const cancelBtn = document.getElementById("btn-cancel-port-edit");
+
+    if (!form || !cancelBtn) return;
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const id = document.getElementById("port-project-id").value;
+      const domain = document.getElementById("port-domain").value.trim();
+      const keyword = document.getElementById("port-keyword").value.trim();
+      const date = document.getElementById("port-date").value;
+      const status = document.getElementById("port-status").value;
+      const traffic = parseInt(document.getElementById("port-traffic").value, 10) || 0;
+      const revenue = parseInt(document.getElementById("port-revenue").value, 10) || 0;
+
+      if (id) {
+        // Edit Mode
+        const idx = portfolioProjects.findIndex(p => p.id === id);
+        if (idx !== -1) {
+          portfolioProjects[idx] = { id, domain, keyword, date, status, traffic, revenue };
+          showToast(`Updated project: "${domain}"`, "success");
+        }
+      } else {
+        // Add Mode
+        const newProj = {
+          id: `port-${Date.now()}`,
+          domain, keyword, date, status, traffic, revenue
+        };
+        portfolioProjects.push(newProj);
+        showToast(`Added project: "${domain}"`, "success");
+      }
+
+      localStorage.setItem("microfinder_portfolio_projects", JSON.stringify(portfolioProjects));
+      cancelProjectEdit();
+      renderPortfolio();
+    });
+
+    cancelBtn.addEventListener("click", cancelProjectEdit);
   }
 
   // --- Checklist Tab Persistent Storage ---

@@ -11,6 +11,7 @@
   const RDAP_ENDPOINT  = "/api/rdap";
   const LS_KEY_APIKEY  = "microfinder_nim_key";
   const LS_KEY_RESULTS = "microfinder_scout_results";
+  const LS_KEY_SETTINGS = "microfinder_scout_settings";
 
   // CPM heuristics by audience/niche (USD per 1000 ad impressions)
   const CPM_MAP = {
@@ -29,7 +30,13 @@
     scanning:  false,
     results:   [],
     dismissed: new Set(),
-    sortBy:    "rank"
+    sortBy:    "rank",
+    settings: {
+      temperature: 0.2,
+      redditLimit: 15,
+      hnPoints: 10,
+      customPrompt: ""
+    }
   };
 
   // ─── DOM refs ─────────────────────────────────────────────────────────────────
@@ -55,6 +62,39 @@
   const sortSelect       = document.getElementById("scout-sort");
   const btnExportCsv     = document.getElementById("btn-export-csv");
   const btnClearSaved    = document.getElementById("btn-clear-saved");
+  
+  const btnToggleSettings = document.getElementById("btn-toggle-scout-settings");
+  const settingsPanel     = document.getElementById("scout-settings-panel");
+  const scoutTemp         = document.getElementById("scout-temp");
+  const scoutTempVal      = document.getElementById("scout-temp-val");
+  const scoutRedditLimit  = document.getElementById("scout-reddit-limit");
+  const scoutHnPoints     = document.getElementById("scout-hn-points");
+  const scoutCustomPrompt = document.getElementById("scout-custom-prompt");
+
+  // ─── Settings Persistence ───────────────────────────────────────────────────
+  function loadSavedSettings() {
+    try {
+      const saved = localStorage.getItem(LS_KEY_SETTINGS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        scoutState.settings = { ...scoutState.settings, ...parsed };
+        
+        if (scoutTemp) {
+          scoutTemp.value = scoutState.settings.temperature;
+          scoutTempVal.textContent = scoutState.settings.temperature;
+        }
+        if (scoutRedditLimit) scoutRedditLimit.value = scoutState.settings.redditLimit;
+        if (scoutHnPoints) scoutHnPoints.value = scoutState.settings.hnPoints;
+        if (scoutCustomPrompt) scoutCustomPrompt.value = scoutState.settings.customPrompt;
+      }
+    } catch (_) {}
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(scoutState.settings));
+    } catch (_) {}
+  }
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
   function init() {
@@ -98,6 +138,7 @@
       ];
       localStorage.setItem(LS_KEY_RESULTS, JSON.stringify(mockData));
     }
+    loadSavedSettings();
     loadSavedKey();
     loadPersistedResults();
     bindEvents();
@@ -111,6 +152,32 @@
     sortSelect?.addEventListener("change", onSortChange);
     btnExportCsv?.addEventListener("click", exportCSV);
     btnClearSaved?.addEventListener("click", clearSaved);
+
+    btnToggleSettings?.addEventListener("click", () => {
+      settingsPanel.classList.toggle("hidden");
+    });
+    
+    scoutTemp?.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      scoutTempVal.textContent = val.toFixed(1);
+      scoutState.settings.temperature = val;
+      saveSettings();
+    });
+
+    scoutRedditLimit?.addEventListener("change", (e) => {
+      scoutState.settings.redditLimit = Math.max(5, Math.min(50, parseInt(e.target.value, 10) || 15));
+      saveSettings();
+    });
+
+    scoutHnPoints?.addEventListener("change", (e) => {
+      scoutState.settings.hnPoints = Math.max(5, Math.min(200, parseInt(e.target.value, 10) || 10));
+      saveSettings();
+    });
+
+    scoutCustomPrompt?.addEventListener("input", (e) => {
+      scoutState.settings.customPrompt = e.target.value;
+      saveSettings();
+    });
   }
 
   // ─── API Key Management ───────────────────────────────────────────────────────
@@ -447,7 +514,7 @@
     const subs  = pickSubreddits(topic).slice(0, 3);
     for (const sub of subs) {
       try {
-        const url  = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(topic)}&sort=top&t=month&limit=15&restrict_sr=true`;
+        const url  = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(topic)}&sort=top&t=month&limit=${scoutState.settings.redditLimit}&restrict_sr=true`;
         const resp = await fetchWithCorsProxy(url);
         if (!resp.ok) continue;
         const data = await resp.json();
@@ -481,7 +548,7 @@
   async function fetchHNPosts(topic) {
     const posts = [];
     try {
-      const url  = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(topic)}&tags=(ask_hn,show_hn)&hitsPerPage=30&numericFilters=points>10`;
+      const url  = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(topic)}&tags=(ask_hn,show_hn)&hitsPerPage=30&numericFilters=points>${scoutState.settings.hnPoints}`;
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HN ${resp.status}`);
       const data = await resp.json();
@@ -507,9 +574,15 @@
 Focus on: specific & well-defined problems, frequent pain, no good free solution, buildable in days.
 IMPORTANT: Respond ONLY with valid JSON array. No markdown, no explanation.`;
 
+    let customPromptText = "";
+    if (scoutState.settings.customPrompt && scoutState.settings.customPrompt.trim() !== "") {
+      customPromptText = `\nADDITIONAL INSTRUCTIONS / FILTER GUIDELINES:\n${scoutState.settings.customPrompt.trim()}\n`;
+    }
+
     const userPrompt = `Topic: "${topic}"
 Posts:
 ${postsText}
+${customPromptText}
 
 Extract 2-5 genuine micro-SaaS opportunities as JSON:
 [
@@ -538,7 +611,7 @@ Return [] if no strong opportunities found.`;
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model, temperature: 0.2, max_tokens: 1024, top_p: 0.7, stream: false,
+          model, temperature: scoutState.settings.temperature, max_tokens: 1024, top_p: 0.7, stream: false,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user",   content: userPrompt }
@@ -559,7 +632,7 @@ Return [] if no strong opportunities found.`;
           method: "POST",
           headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model, temperature: 0.2, max_tokens: 1024, top_p: 0.7, stream: false,
+            model, temperature: scoutState.settings.temperature, max_tokens: 1024, top_p: 0.7, stream: false,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user",   content: userPrompt }
