@@ -404,7 +404,7 @@
     let fallbackToClient = false;
     try {
       const resp = await fetch(`${RDAP_ENDPOINT}?domain=${encodeURIComponent(domain)}`);
-      if (resp.status === 404) {
+      if (!resp.ok) {
         fallbackToClient = true;
       } else {
         const data = await resp.json();
@@ -618,7 +618,7 @@ Return [] if no strong opportunities found.`;
           ]
         })
       });
-      if (response.status === 404) {
+      if (!response.ok && response.status !== 401 && response.status !== 429) {
         fallbackToDirect = true;
       }
     } catch (e) {
